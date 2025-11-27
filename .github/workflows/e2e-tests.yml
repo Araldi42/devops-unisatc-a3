@@ -1,0 +1,57 @@
+name: E2E Tests (Playwright)
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  e2e:
+    name: Run Strapi E2E Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v5.0.0
+    - name: Use Node.js 21
+      uses: actions/setup-node@v6.0.0
+      with:
+        node-version: 22
+        cache: 'npm'
+    - run: npm install
+    - run: npx playwright install --with-deps
+
+    - name: Build Strapi Admin and Seed Data
+      run: |
+        npm run build
+        npm run seed:example
+      env:
+        APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
+        NODE_ENV: production
+        
+    - name: Start Strapi Server in Background
+      run: |
+        # Inicia o servidor Strapi em modo 'start' e manda para o background (&)
+        strapi start &
+      env:
+        APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
+        NODE_ENV: production
+
+    - name: Wait for Strapi to be Ready (localhost:1337)
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 5
+        max_attempts: 10
+        delay_seconds: 30
+        command: curl -sSf http://localhost:1337/admin
+
+    - name: Run Playwright Tests
+      run: npx playwright test
+
+    - name: Upload Test Report (on failure)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: artifacts/report
+        retention-days: 5
