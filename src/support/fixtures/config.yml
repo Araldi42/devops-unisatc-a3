@@ -1,0 +1,2 @@
+application:
+  strapi_admin: "http://localhost:1337/admin"
