@@ -1,0 +1,186 @@
+name: CI/CD Pipeline Completa
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Executar testes E2E
+  test:
+    name: Testes E2E com Playwright
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+      
+      - name: Build Strapi Admin and Seed Data
+        run: |
+          pnpm build
+          pnpm seed:example
+        env:
+          APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
+          NODE_ENV: production
+      
+      - name: Start Strapi Server in Background
+        run: pnpm start &
+        env:
+          APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
+          NODE_ENV: production
+      
+      - name: Wait for Strapi to be Ready
+        uses: nick-invision/retry@v2
+        with:
+          timeout_minutes: 5
+          max_attempts: 10
+          delay_seconds: 30
+          command: curl -sSf http://localhost:1337/admin
+      
+      - name: Run Playwright Tests
+        run: pnpm exec playwright test
+      
+      - name: Upload Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: artifacts/report
+          retention-days: 5
+
+  # Job 2: Build e Push Docker Image (apenas em push para master e se os testes passarem)
+  docker:
+    name: Build e Push Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/strapi-devops
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/strapi-devops:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/strapi-devops:buildcache,mode=max
+          platforms: linux/amd64
+      
+      - name: Image built successfully
+        run: |
+          echo "✅ Docker image built and pushed successfully!"
+          echo "📦 Image: ${{ steps.meta.outputs.tags }}"
+
+  # Job 3: Deploy para AWS ECS com Terraform (apenas em push para master)
+  deploy:
+    name: Deploy to AWS ECS
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    defaults:
+      run:
+        working-directory: terraform
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+          terraform_wrapper: false
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Validate
+        run: terraform validate
+      
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="docker_image=${{ secrets.DOCKER_USERNAME }}/strapi-devops:latest" \
+            -var="app_keys=${{ secrets.STRAPI_APP_KEYS }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Get deployment info
+        id: get_url
+        run: |
+          ALB_DNS=$(terraform output -raw alb_dns_name)
+          echo "alb_dns=${ALB_DNS}" >> $GITHUB_OUTPUT
+          echo "app_url=http://${ALB_DNS}" >> $GITHUB_OUTPUT
+          echo "admin_url=http://${ALB_DNS}/admin" >> $GITHUB_OUTPUT
+      
+      - name: Display deployment info
+        run: |
+          echo "🚀 Deploy concluído com sucesso!"
+          echo "📍 URL da aplicação: ${{ steps.get_url.outputs.app_url }}"
+          echo "🔐 Admin Strapi: ${{ steps.get_url.outputs.admin_url }}"
+      
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Deploy realizado com sucesso!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**🌐 URL da aplicação:** ${{ steps.get_url.outputs.app_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**🔐 Admin Strapi:** ${{ steps.get_url.outputs.admin_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**📦 Docker Image:** ${{ secrets.DOCKER_USERNAME }}/strapi-devops:latest" >> $GITHUB_STEP_SUMMARY
+          echo "**☁️ Provider:** AWS ECS (Fargate)" >> $GITHUB_STEP_SUMMARY
+

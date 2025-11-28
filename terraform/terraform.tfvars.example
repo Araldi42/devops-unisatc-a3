@@ -1,0 +1,18 @@
+# Arquivo de exemplo para variáveis
+# Copie para terraform.tfvars e preencha com seus valores
+
+aws_region = "us-east-1"
+project_name = "strapi-devops"
+environment = "prod"
+
+# Será preenchido automaticamente pela GitHub Action
+# docker_image = "seuusuario/strapi-devops:latest"
+
+# APP_KEYS do Strapi (gere novas chaves para produção)
+# app_keys = "sua-chave-1,sua-chave-2,sua-chave-3,sua-chave-4"
+
+# Recursos do container
+container_cpu = 256
+container_memory = 512
+desired_count = 1
+

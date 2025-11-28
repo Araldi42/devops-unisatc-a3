@@ -1,0 +1,71 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Strapi
+.tmp/
+.cache/
+.strapi/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Build
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation
+*.md
+README.md
+LICENSE
+
+# Tests
+artifacts/
+test-results/
+playwright-report/
+src/scenarios/
+src/support/
+
+# Terraform
+terraform/
+*.tf
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Misc
+coverage/
+.nyc_output/
+

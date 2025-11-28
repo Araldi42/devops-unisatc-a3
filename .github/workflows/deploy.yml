@@ -1,0 +1,83 @@
+name: Deploy to AWS ECS
+
+on:
+  workflow_run:
+    workflows: ["Docker Build and Push"]
+    types:
+      - completed
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to AWS with Terraform
+    runs-on: ubuntu-latest
+    
+    # Só executa se o workflow anterior foi bem sucedido
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    defaults:
+      run:
+        working-directory: terraform
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Terraform Validate
+        run: terraform validate
+      
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="docker_image=${{ secrets.DOCKER_USERNAME }}/strapi-devops:latest" \
+            -var="app_keys=${{ secrets.STRAPI_APP_KEYS }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -out=tfplan
+        continue-on-error: false
+      
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/master'
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Get Load Balancer URL
+        id: get_url
+        run: |
+          ALB_DNS=$(terraform output -raw alb_dns_name)
+          echo "alb_url=http://${ALB_DNS}" >> $GITHUB_OUTPUT
+          echo "admin_url=http://${ALB_DNS}/admin" >> $GITHUB_OUTPUT
+      
+      - name: Display deployment info
+        run: |
+          echo "🚀 Deploy concluído com sucesso!"
+          echo "📍 URL da aplicação: ${{ steps.get_url.outputs.alb_url }}"
+          echo "🔐 Admin Strapi: ${{ steps.get_url.outputs.admin_url }}"
+      
+      - name: Comment PR with deployment info
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🚀 Deploy realizado com sucesso!\n\n**URL da aplicação:** ${{ steps.get_url.outputs.alb_url }}\n**Admin Strapi:** ${{ steps.get_url.outputs.admin_url }}`
+            })
+
