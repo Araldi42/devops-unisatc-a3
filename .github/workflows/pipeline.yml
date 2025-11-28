@@ -157,6 +157,13 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
       
+      - name: Terraform Destroy (limpar recursos existentes)
+        run: |
+          terraform destroy -auto-approve \
+            -var="docker_image=${{ secrets.DOCKER_USERNAME }}/strapi-devops:latest" \
+            -var="app_keys=${{ secrets.STRAPI_APP_KEYS }}" \
+            -var="aws_region=${{ secrets.AWS_REGION }}" || true
+      
       - name: Terraform Plan
         id: plan
         run: |
