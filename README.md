@@ -286,4 +286,4 @@ Crie o PR no GitHub → ❌ Testes falharão
 - Added pnpm support
 
 
-teste final
+teste final 2
