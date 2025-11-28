@@ -35,3 +35,11 @@ pnpm build
 ```
 ---
 <sub>🤫 Psst! [Strapi is hiring](https://strapi.io/careers).</sub>
+
+
+## 📝 Changelog
+
+### v1.0.0
+- Initial release
+- Basic Strapi setup configured
+- Added pnpm support
