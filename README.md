@@ -284,3 +284,6 @@ Crie o PR no GitHub → ❌ Testes falharão
 - Initial release
 - Basic Strapi setup configured
 - Added pnpm support
+
+
+teste final
