@@ -1,2 +1,2 @@
 application:
-  strapi_admin: "http://localhost:1337/admin"
+  strapi_admin: "http://localhost:9999/admin"
