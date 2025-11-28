@@ -12,35 +12,27 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install pnpm
-      uses: pnpm/action-setup@v3
-      with:
-        version: 9
-    
-    - name: Use Node.js 22
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v5.0.0
+    - name: Use Node.js 21
+      uses: actions/setup-node@v6.0.0
       with:
         node-version: 22
-        cache: 'pnpm'
-    
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile
-    
-    - name: Install Playwright browsers
-      run: pnpm exec playwright install --with-deps
+        cache: 'npm'
+    - run: npm install
+    - run: npx playwright install --with-deps
 
     - name: Build Strapi Admin and Seed Data
       run: |
-        pnpm build
-        pnpm seed:example
+        npm run build
+        npm run seed:example
       env:
         APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
         NODE_ENV: production
         
     - name: Start Strapi Server in Background
-      run: pnpm start &
+      run: |
+        # Inicia o servidor Strapi em modo 'start' e manda para o background (&)
+        strapi start &
       env:
         APP_KEYS: ImJMpHjnCdJw4ii7jZzCXQ==,Jg239VoMach6Fh2LAH6ydA==,LAdmPTwE8oqyVjAV4pCkBQ==,f1gPGngKmE5xhyDktSpCVw==
         NODE_ENV: production
@@ -54,7 +46,7 @@ jobs:
         command: curl -sSf http://localhost:1337/admin
 
     - name: Run Playwright Tests
-      run: pnpm exec playwright test
+      run: npx playwright test
 
     - name: Upload Test Report (on failure)
       if: always()
